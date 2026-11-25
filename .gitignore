@@ -4,7 +4,7 @@ __pycache__/
 allure-results/
 allure-report/
 
-allure-cart-results/
+allure-*-results/
 
 .env
 .env.*
