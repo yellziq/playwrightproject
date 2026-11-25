@@ -1,7 +1,7 @@
 import logging
 import re
 
-from playwright.sync_api import Locator, expect
+from playwright.sync_api import Locator, TimeoutError, expect
 
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class CatalogPage:
     def open_authorization(self):
         logger.info("Открытие страницы авторизации")
         # The site exposes the link in its mobile menu. Its destination is /auth/.
-        response = self.page.goto(f"{self.base_url}/auth/", wait_until="domcontentloaded")
+        response = self.page.goto(f"{self.base_url}/auth/", wait_until="commit")
         assert response is not None and response.ok, "Страница входа не вернула успешный HTTP-ответ"
 
 
@@ -87,13 +87,33 @@ class AuthorizationPage:
             expect(checkbox).to_be_checked()
 
     def submit_code_after_entry(self, timeout_ms):
-        code_group = self.form.locator(".form-group").filter(
-            has=self.page.locator('label:text-is("Введите код")')
+        # The user can submit from the browser before Playwright reaches the
+        # button. In that case the redirect is also a valid next state.
+        state = self.page.wait_for_function(
+            r"""() => {
+                const form = document.querySelector('[id^="bx-authorization-"]');
+                if (!form || !form.getClientRects().length) return 'left-form';
+                const label = [...form.querySelectorAll('label')].find(
+                    node => node.textContent.trim() === 'Введите код'
+                );
+                const input = label?.closest('.form-group')?.querySelector('input.form-control');
+                if (!input) return false;
+                const button = [...form.querySelectorAll('button')].find(
+                    node => node.textContent.trim() === 'Продолжить'
+                );
+                if (!button || button.disabled) return false;
+                if (/^[0-9]{6}$/.test(input.value)) return 'ready';
+                if (input.value === '' && document.activeElement !== input) input.focus();
+                return false;
+            }""",
+            timeout=timeout_ms,
         )
-        code = code_group.locator("input.form-control")
-        code.click(timeout=timeout_ms)
-        expect(code).to_have_value(re.compile(r"^[0-9]{6}$"), timeout=timeout_ms)
-        self.continue_button.click()
+        if state.json_value() == "ready":
+            try:
+                self.continue_button.click(no_wait_after=True, timeout=3000)
+            except TimeoutError:
+                if self.form.is_visible():
+                    raise
 
     def wait_for_login(self, timeout_ms):
         # The phone form also disappears during OTP entry. Leave the auth page

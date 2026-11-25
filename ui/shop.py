@@ -1,8 +1,12 @@
+import logging
 import re
 from decimal import Decimal
 from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import expect
+
+
+logger = logging.getLogger(__name__)
 
 
 def ruble_amount(text):
@@ -25,17 +29,22 @@ class ShopPages:
     def __init__(self, page, base_url):
         self.page = page
         self.base_url = base_url
+        self.add_button = page.locator(".detail-buy-button:visible")
         self.cart_row = page.locator(".basket-items-list-item-container")
 
     def search_for_product(self):
-        self.page.goto(f"{self.base_url}/", wait_until="domcontentloaded")
+        logger.info("Открытие главной и поиск товара")
+        self.page.goto(f"{self.base_url}/", wait_until="commit")
         search = self.page.locator('input[name="q"][placeholder="Поиск товара"]:visible')
         search.fill(self.product_query)
-        search.press("Enter")
+        search.press("Enter", no_wait_after=True)
+        self.page.wait_for_url("**/catalog/?q=*", wait_until="commit")
         link = self.page.locator(f'a[href="{self.product_path}"]:visible').filter(
             has_text=self.product_query
         )
-        link.click()
+        logger.info("Переход из результатов поиска в карточку")
+        link.click(no_wait_after=True)
+        self.page.wait_for_url(f"**{self.product_path}", wait_until="commit")
 
     def read_product(self):
         name = self.page.locator("h1")
@@ -45,12 +54,14 @@ class ShopPages:
         return name.inner_text().strip(), ruble_amount(price.inner_text())
 
     def add_to_cart(self):
-        button = self.page.locator(".detail-buy-button")
-        button.click()
-        expect(button).to_have_class(re.compile(r"\bin-basket\b"))
+        logger.info("Нажатие «В корзину» в карточке товара")
+        self.add_button.click()
+        expect(self.page.locator(".detail-buy-button")).to_have_class(re.compile(r"\bin-basket\b"))
+        logger.info("Сайт подтвердил добавление товара")
 
     def open_cart(self):
-        self.page.goto(f"{self.base_url}/personal/cart/", wait_until="domcontentloaded")
+        logger.info("Открытие корзины")
+        self.page.goto(f"{self.base_url}/personal/cart/", wait_until="commit")
         expect(self.page.locator("h1")).to_have_text("Моя корзина")
 
     def verify_cart(self, name, unit_price, quantity=1):

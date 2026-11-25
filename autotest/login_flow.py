@@ -15,6 +15,7 @@ def sign_in(page, settings, phone=""):
     with allure.step("Открыть форму входа в новой сессии"):
         CatalogPage(page, settings.base_url).open_authorization()
         authorization.should_show_phone_form()
+        logger.info("Форма входа загрузилась")
 
     with allure.step("Дождаться ввода телефона, подтвердить согласие и продолжить"):
         if not phone:
@@ -44,5 +45,6 @@ def sign_in(page, settings, phone=""):
     with allure.step("Подтвердить активную сессию в личном кабинете"):
         try:
             ProfilePage(page, settings.base_url).verify_session()
+            logger.info("Активная сессия подтверждена")
         except Error:
             pytest.fail("Не удалось открыть личный кабинет", pytrace=False)
