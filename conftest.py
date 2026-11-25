@@ -2,7 +2,7 @@ import logging
 
 import allure
 import pytest
-from playwright.sync_api import Error, sync_playwright
+from playwright.sync_api import Error, expect, sync_playwright
 
 from core.config import Settings
 from core.logging_mask import mask_credentials
@@ -10,7 +10,9 @@ from core.logging_mask import mask_credentials
 
 @pytest.fixture(scope="session")
 def settings():
-    return Settings.from_env()
+    config = Settings.from_env()
+    expect.set_options(timeout=config.timeout_ms)
+    return config
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -78,7 +80,7 @@ def pytest_runtest_makereport(item, call):
             # Public checks use anonymous contexts. Mask form fields even there.
             screenshot = page.screenshot(
                 mask=[page.locator("input, textarea, [contenteditable='true']")],
-                timeout=3000,
+                timeout=7000,
             )
             title = "Страница при сбое" if report.failed else "Скриншот для демонстрации"
             allure.attach(screenshot, title, allure.attachment_type.PNG)
